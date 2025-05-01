@@ -1,23 +1,31 @@
-﻿using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using OPS.Models;
-using System.Collections.Generic;
-using System.Linq;
 
 namespace OPS.Controllers
 {
-    public class Ops : Controller
+    public class OpsController : Controller
     {
-        public static List<Product> products = new List<Product>();
+        private readonly OPSContext _context;
 
-        public ActionResult Index()
+        // Inject OPSContext into the controller
+        public OpsController(OPSContext context)
         {
+            _context = context;
+        }
+
+        // GET: Ops
+        public async Task<IActionResult> Index()
+        {
+            // Retrieve products from the database
+            var products = await _context.Products.ToListAsync();
             return View(products);
         }
 
-        public ActionResult Details(int id)
+        // GET: Ops/Details/5
+        public async Task<IActionResult> Details(int id)
         {
-            var product = products.FirstOrDefault(p => p.Id == id);
+            var product = await _context.Products.FindAsync(id);
             if (product == null)
             {
                 return NotFound();
@@ -25,34 +33,30 @@ namespace OPS.Controllers
             return View(product);
         }
 
-        public ActionResult Create()
+        // GET: Ops/Create
+        public IActionResult Create()
         {
             return View();
         }
 
+        // POST: Ops/Create
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public ActionResult Create(Product product)
+        public async Task<IActionResult> Create([Bind("Name,Description,Price,Stock")] Product product)
         {
-            try
+            if (ModelState.IsValid)
             {
-                if (ModelState.IsValid)
-                {
-                    product.Id = products.Count > 0 ? products.Max(p => p.Id) + 1 : 1; 
-                    products.Add(product);
-                    return RedirectToAction(nameof(Index));
-                }
-                return View(product);
+                _context.Add(product);
+                await _context.SaveChangesAsync();
+                return RedirectToAction(nameof(Index));
             }
-            catch
-            {
-                return View();
-            }
+            return View(product);
         }
 
-        public ActionResult Edit(int id)
+        // GET: Ops/Edit/5
+        public async Task<IActionResult> Edit(int id)
         {
-            var product = products.FirstOrDefault(p => p.Id == id);
+            var product = await _context.Products.FindAsync(id);
             if (product == null)
             {
                 return NotFound();
@@ -60,60 +64,67 @@ namespace OPS.Controllers
             return View(product);
         }
 
+        // POST: Ops/Edit/5
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public ActionResult Edit(int id, Product updatedProduct)
+        public async Task<IActionResult> Edit(int id, [Bind("Id,Name,Description,Price,Stock")] Product updatedProduct)
         {
-            try
-            {
-                var product = products.FirstOrDefault(p => p.Id == id);
-                if (product == null)
-                {
-                    return NotFound();
-                }
-
-                if (ModelState.IsValid)
-                {
-                    product.Name = updatedProduct.Name; 
-                    product.Description = updatedProduct.Description;
-                    product.Price = updatedProduct.Price;
-                    product.Stock = updatedProduct.Stock;
-                    return RedirectToAction(nameof(Index));
-                }
-                return View(updatedProduct);
-            }
-            catch
-            {
-                return View();
-            }
-        }
-        public ActionResult Delete(int id)
-        {
-            var product = products.FirstOrDefault(p => p.Id == id);
-            if (product == null)
+            if (id != updatedProduct.Id)
             {
                 return NotFound();
             }
-            return View(product);
-        }
 
-        [HttpPost]
-        [ValidateAntiForgeryToken]
-        public ActionResult Delete(int id, IFormCollection collection)
-        {
-            try
+            if (ModelState.IsValid)
             {
-                var product = products.FirstOrDefault(p => p.Id == id);
-                if (product != null)
+                try
                 {
-                    products.Remove(product);
+                    _context.Update(updatedProduct);
+                    await _context.SaveChangesAsync();
+                }
+                catch (DbUpdateConcurrencyException)
+                {
+                    if (!ProductExists(updatedProduct.Id))
+                    {
+                        return NotFound();
+                    }
+                    else
+                    {
+                        throw;
+                    }
                 }
                 return RedirectToAction(nameof(Index));
             }
-            catch
+            return View(updatedProduct);
+        }
+
+        // GET: Ops/Delete/5
+        public async Task<IActionResult> Delete(int id)
+        {
+            var product = await _context.Products.FindAsync(id);
+            if (product == null)
             {
-                return View();
+                return NotFound();
             }
+            return View(product);
+        }
+
+        // POST: Ops/Delete/5
+        [HttpPost, ActionName("Delete")]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> DeleteConfirmed(int id)
+        {
+            var product = await _context.Products.FindAsync(id);
+            if (product != null)
+            {
+                _context.Products.Remove(product);
+                await _context.SaveChangesAsync();
+            }
+            return RedirectToAction(nameof(Index));
+        }
+
+        private bool ProductExists(int id)
+        {
+            return _context.Products.Any(e => e.Id == id);
         }
     }
 }

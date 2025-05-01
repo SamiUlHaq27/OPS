@@ -1,174 +1,190 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using OPS.Models;
-using System.Collections.Generic;
 using System.Linq;
+using System.Threading.Tasks;
 
 namespace OPS.Controllers
 {
     public class OrderController : Controller
     {
-        private static List<Order> orders = new List<Order>();
-        private static List<Product> products = Ops.products;
+        private readonly OPSContext _context;
+
+        // Inject OPSContext into the controller
+        public OrderController(OPSContext context)
+        {
+            _context = context;
+        }
 
         // GET: Order
-        public ActionResult Index()
+        public async Task<IActionResult> Index()
         {
+            // Get orders from the database, including related OrderItems and Products
+            var orders = await _context.Orders.Include(o => o.OrderItems)
+                                               .ThenInclude(oi => oi.Product)
+                                               .ToListAsync();
             return View(orders);
         }
 
         // GET: Order/Details/5
-        public ActionResult Details(int id)
+        public async Task<IActionResult> Details(int id)
         {
-            var order = orders.FirstOrDefault(o => o.Id == id);
+            var order = await _context.Orders
+                .Include(o => o.OrderItems)
+                .ThenInclude(oi => oi.Product)
+                .FirstOrDefaultAsync(o => o.Id == id);
+
             if (order == null)
             {
                 return NotFound();
             }
+
             return View(order);
         }
 
         // GET: Order/Create
-        public ActionResult Create()
+        public async Task<IActionResult> Create()
         {
-            ViewBag.Products = products; // Pass the list of products to the view
+            // Retrieve the list of products from the database to pass to the view
+            ViewBag.Products = await _context.Products.ToListAsync();
             return View();
         }
 
         // POST: Order/Create
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public ActionResult Create(Order order, int[] selectedProducts)
+        public async Task<IActionResult> Create(Order order, int[] selectedProducts)
         {
-            try
+            if (ModelState.IsValid)
             {
-                if (ModelState.IsValid)
+                order.OrderDate = DateTime.Now;
+                order.OrderItems = new List<OrderItem>();
+
+                // Add selected products to the order's OrderItems list
+                foreach (var productId in selectedProducts)
                 {
-                    order.Id = orders.Count > 0 ? orders.Max(o => o.Id) + 1 : 1;
-                    order.OrderDate = DateTime.Now;
-
-                    // Add selected products to the order
-                    order.OrderItems = new List<OrderItem>();
-                    foreach (var productId in selectedProducts)
+                    var product = await _context.Products.FindAsync(productId);
+                    if (product != null)
                     {
-                        var product = products.FirstOrDefault(p => p.Id == productId);
-                        if (product != null)
+                        order.OrderItems.Add(new OrderItem
                         {
-                            order.OrderItems.Add(new OrderItem
-                            {
-                                ProductId = product.Id,
-                                ProductName = product.Name,
-                                ProductPrice = product.Price,
-                                Quantity = 1 // Default to 1 for simplicity
-                            });
-                        }
+                            ProductId = product.Id,
+                            ProductName = product.Name,
+                            ProductPrice = product.Price,
+                            Quantity = 1 // Default to 1 for simplicity
+                        });
                     }
-
-
-                    orders.Add(order);
-                    return RedirectToAction(nameof(Index));
                 }
-                ViewBag.Products = products;
-                return View(order);
+
+                _context.Orders.Add(order);
+                await _context.SaveChangesAsync();
+                return RedirectToAction(nameof(Index));
             }
-            catch
-            {
-                return View();
-            }
+
+            // If we get here, something failed. Re-pass the products list to the view.
+            ViewBag.Products = await _context.Products.ToListAsync();
+            return View(order);
         }
 
         // GET: Order/Edit/5
-        public ActionResult Edit(int id)
+        public async Task<IActionResult> Edit(int id)
         {
-            var order = orders.FirstOrDefault(o => o.Id == id);
+            var order = await _context.Orders
+                .Include(o => o.OrderItems)
+                .ThenInclude(oi => oi.Product)
+                .FirstOrDefaultAsync(o => o.Id == id);
+
             if (order == null)
             {
                 return NotFound();
             }
-            ViewBag.Products = products;
+
+            ViewBag.Products = await _context.Products.ToListAsync();
             return View(order);
         }
 
         // POST: Order/Edit/5
         [HttpPost]
         [ValidateAntiForgeryToken]
-        public ActionResult Edit(int id, Order updatedOrder, int[] selectedProducts)
+        public async Task<IActionResult> Edit(int id, Order updatedOrder, int[] selectedProducts)
         {
-            try
+            if (id != updatedOrder.Id)
             {
-                var order = orders.FirstOrDefault(o => o.Id == id);
+                return NotFound();
+            }
+
+            if (ModelState.IsValid)
+            {
+                var order = await _context.Orders.Include(o => o.OrderItems).FirstOrDefaultAsync(o => o.Id == id);
                 if (order == null)
                 {
                     return NotFound();
                 }
 
-                if (ModelState.IsValid)
+                // Update order properties
+                order.CustomerName = updatedOrder.CustomerName;
+                order.CustomerEmail = updatedOrder.CustomerEmail;
+                order.ShippingAddress = updatedOrder.ShippingAddress;
+                order.Status = updatedOrder.Status;
+
+                // Clear old order items and add new selected products
+                order.OrderItems.Clear();
+                foreach (var productId in selectedProducts)
                 {
-                    // Update order fields
-                    order.OrderDate = updatedOrder.OrderDate;
-                    order.CustomerName = updatedOrder.CustomerName;
-                    order.CustomerEmail = updatedOrder.CustomerEmail;
-                    order.ShippingAddress = updatedOrder.ShippingAddress;
-                    order.Status = updatedOrder.Status;
-
-                    // Clear old order items and add new selected products
-                    order.OrderItems.Clear();
-                    foreach (var productId in selectedProducts)
+                    var product = await _context.Products.FindAsync(productId);
+                    if (product != null)
                     {
-                        var product = products.FirstOrDefault(p => p.Id == productId);
-                        if (product != null)
+                        order.OrderItems.Add(new OrderItem
                         {
-                            order.OrderItems.Add(new OrderItem
-                            {
-                                ProductId = product.Id,
-                                ProductName = product.Name,
-                                ProductPrice = product.Price,
-                                Quantity = 1
-                            });
-                        }
+                            ProductId = product.Id,
+                            ProductName = product.Name,
+                            ProductPrice = product.Price,
+                            Quantity = 1 // Default to 1 for simplicity
+                        });
                     }
-
-
-                    return RedirectToAction(nameof(Index));
                 }
-                ViewBag.Products = products;
-                return View(updatedOrder);
+
+                _context.Orders.Update(order);
+                await _context.SaveChangesAsync();
+                return RedirectToAction(nameof(Index));
             }
-            catch
-            {
-                return View();
-            }
+
+            // If we get here, something failed. Re-pass the products list to the view.
+            ViewBag.Products = await _context.Products.ToListAsync();
+            return View(updatedOrder);
         }
 
         // GET: Order/Delete/5
+        [HttpPost]
+        [ValidateAntiForgeryToken]
         public ActionResult Delete(int id)
         {
-            var order = orders.FirstOrDefault(o => o.Id == id);
+            var order = _context.Orders.Include(o => o.OrderItems).FirstOrDefault(o => o.Id == id);
             if (order == null)
             {
                 return NotFound();
             }
-            return View(order);
+
+            _context.Orders.Remove(order);
+            _context.SaveChanges();
+            return RedirectToAction(nameof(Index));
         }
 
+
         // POST: Order/Delete/5
-        [HttpPost]
+        [HttpPost, ActionName("Delete")]
         [ValidateAntiForgeryToken]
-        public ActionResult Delete(int id, IFormCollection collection)
+        public async Task<IActionResult> DeleteConfirmed(int id)
         {
-            try
+            var order = await _context.Orders.FindAsync(id);
+            if (order != null)
             {
-                var order = orders.FirstOrDefault(o => o.Id == id);
-                if (order != null)
-                {
-                    orders.Remove(order);
-                }
-                return RedirectToAction(nameof(Index));
+                _context.Orders.Remove(order);
+                await _context.SaveChangesAsync();
             }
-            catch
-            {
-                return View();
-            }
+
+            return RedirectToAction(nameof(Index));
         }
     }
 }
