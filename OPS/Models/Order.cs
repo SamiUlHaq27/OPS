@@ -10,14 +10,14 @@ namespace OPS.Models
         [Required]
         public DateTime OrderDate { get; set; }
         [Required]
-        public string CustomerName { get; set; }
+        public required string CustomerName { get; set; }
         [Required]
-        public string CustomerEmail { get; set; }
+        public required string CustomerEmail { get; set; }
         [Required]
-        public string ShippingAddress { get; set; }
+        public required string ShippingAddress { get; set; }
         [Required]
-        public string Status { get; set; }
-        public List<OrderItem> OrderItems { get; set; }
+        public required string Status { get; set; }
+        public required List<OrderItem> OrderItems { get; set; }
 
         public decimal TotalAmount
         {

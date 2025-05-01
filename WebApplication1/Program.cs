@@ -1,11 +1,7 @@
-using Microsoft.EntityFrameworkCore;
-using OPS.Models;
-
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 builder.Services.AddControllersWithViews();
-builder.Services.AddDbContext<OPSContext>(options => options.UseSqlServer(builder.Configuration.GetConnectionString("OPSCon")));
 
 var app = builder.Build();
 
